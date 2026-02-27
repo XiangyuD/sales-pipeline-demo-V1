@@ -1,0 +1,14 @@
+I want to make an salesperson pipeline application on the wins PC.
+
+In a horse race game, every project we will put as a horse.  The position of each horse shows the different process in the project.
+
+This is the basic features:
+
+1. Create a new horse: when a sale man create a new project. The dates salesperson input: 1. Date 2. Customer detail 3. Project info. 
+
+2. Different steps: 1. Lead 2. Qualification 3.Solution Design 4.Proposal 5.Negotiation 6.Contract Review 7.Closing. 
+
+We need to visualize it and let every salesperson can input and update the info of the project, so the boss can see the whole picture of the sale process.
+
+
+

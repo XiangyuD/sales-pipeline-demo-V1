@@ -1,0 +1,3 @@
+Supabase:
+project name: sales-horse-pipeline
+PW: EE3CNUI4caZRSSJK
