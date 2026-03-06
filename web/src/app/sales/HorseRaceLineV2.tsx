@@ -42,6 +42,92 @@ const fmtMoney = (n: number) => {
   }
 };
 
+// ========= tiny UI helpers (same vibe) =========
+function Pill({
+  children,
+  tone = "default",
+  className = "",
+}: {
+  children: React.ReactNode;
+  tone?: "default" | "warn" | "won" | "lost" | "amount";
+  className?: string;
+}) {
+  const toneCls =
+    tone === "warn"
+      ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+      : tone === "won"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+      : tone === "lost"
+      ? "border-rose-400/25 bg-rose-400/10 text-rose-200"
+      : tone === "amount"
+      ? "border-blue-400/25 bg-blue-400/10 text-blue-200"
+      : "border-white/10 bg-white/[0.04] text-white/85";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${toneCls} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function GhostBtn({
+  children,
+  onClick,
+  disabled,
+  title,
+  className = "",
+}: {
+  children: React.ReactNode;
+  onClick?: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className={`text-xs px-2.5 py-1 rounded-md border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] transition disabled:opacity-40 disabled:cursor-not-allowed ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ModalShell({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="w-[560px] max-w-[94vw] rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-lg font-semibold text-white">{title}</div>
+            {subtitle ? (
+              <div className="mt-1 text-xs text-white/55">{subtitle}</div>
+            ) : null}
+          </div>
+
+          <GhostBtn onClick={() => onClose()}>Close</GhostBtn>
+        </div>
+
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function HorseRaceLineV2({
   projects,
   onMove,
@@ -55,7 +141,7 @@ export function HorseRaceLineV2({
   onSaveReason: (projectId: string, reason: string) => Promise<void> | void;
   title?: string;
 }) {
-  // ✅ Single reason modal state (no double overlay)
+  // Reason modal state
   const [reasonTarget, setReasonTarget] = useState<Project | null>(null);
   const [isEditingReason, setIsEditingReason] = useState(false);
   const [reasonDraft, setReasonDraft] = useState("");
@@ -82,16 +168,18 @@ export function HorseRaceLineV2({
 
   return (
     <>
-      <div className="rounded-2xl border p-6 bg-black/30">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-[0_8px_30px_rgba(0,0,0,0.35)] p-6">
         <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold">{title}</div>
-          <div className="text-xs text-neutral-400">Lead → Closing</div>
+          <div>
+            <div className="text-lg font-semibold text-white">{title}</div>
+            <div className="mt-1 text-xs text-white/55">Lead → Closing</div>
+          </div>
         </div>
 
-        {/* ✅ Stage header (compressed so no huge blank area) */}
-        <div className="relative mt-2 mb-2 h-8">
-          <div className="absolute left-0 right-0 top-5 h-2 bg-white/10 rounded-full" />
-          <div className="absolute left-0 right-0 top-6 h-[2px] border-t border-dashed border-white/15" />
+        {/* Stage header (compressed) */}
+        <div className="relative mt-4 mb-3 h-8">
+          <div className="absolute left-0 right-0 top-5 h-[6px] bg-white/[0.06] rounded-full" />
+          <div className="absolute left-0 right-0 top-[22px] h-[2px] border-t border-dashed border-white/10" />
 
           {STAGES.map((s, idx) => {
             const isFirst = idx === 0;
@@ -101,7 +189,7 @@ export function HorseRaceLineV2({
               return (
                 <div
                   key={s}
-                  className="absolute -translate-x-1/2 text-[11px] text-neutral-400"
+                  className="absolute -translate-x-1/2 text-[11px] text-white/45"
                   style={{ left: `${stagePct(s) * 100}%`, top: 0 }}
                 >
                   {s}
@@ -113,7 +201,7 @@ export function HorseRaceLineV2({
               return (
                 <div
                   key={s}
-                  className="absolute text-[11px] text-neutral-400"
+                  className="absolute text-[11px] text-white/45"
                   style={{ left: 0, top: 0 }}
                 >
                   {s}
@@ -124,7 +212,7 @@ export function HorseRaceLineV2({
             return (
               <div
                 key={s}
-                className="absolute text-[11px] text-neutral-400 text-right"
+                className="absolute text-[11px] text-white/45 text-right"
                 style={{ right: 0, top: 0 }}
               >
                 {s}
@@ -133,14 +221,13 @@ export function HorseRaceLineV2({
           })}
         </div>
 
-        {/* ✅ Lanes (tighter vertical spacing) */}
+        {/* Lanes */}
         <div className="flex flex-col gap-3">
           {projects.map((p) => {
             const raw = stagePct(p.stage) * 100; // 0..100
             const isStart = raw <= 0.0001;
             const isEnd = raw >= 99.9999;
 
-            // keep card in bounds at start/end
             const anchorClass = isStart
               ? "translate-x-0"
               : isEnd
@@ -169,104 +256,99 @@ export function HorseRaceLineV2({
 
             const closeText =
               p.close_status === "won"
-                ? "✅ Won"
+                ? "Won"
                 : p.close_status === "lost"
-                ? "❌ Lost"
+                ? "Lost"
                 : "Closing";
 
             const canShowReasonButton =
-              isClosing && p.close_status === "lost" && (p.lost_reason ?? "").trim().length > 0;
+              isClosing &&
+              p.close_status === "lost" &&
+              (p.lost_reason ?? "").trim().length > 0;
 
             return (
               <div key={p.id} className="relative h-[120px]">
                 {/* lane track */}
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-2 rounded-full bg-white/10" />
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] border-t border-dashed border-white/15" />
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-white/[0.06]" />
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] border-t border-dashed border-white/10" />
 
                 {/* card */}
                 <div
                   className={`absolute top-1/2 -translate-y-1/2 ${anchorClass} transition-[left] duration-300 ease-out`}
                   style={{ left: `${raw}%` }}
                 >
-                  <div className="relative w-64 rounded-2xl border border-white/15 bg-black/70 p-3 shadow-lg">
+                  <div className="relative w-64 rounded-2xl border border-white/12 bg-[#0B0F18]/80 backdrop-blur-md p-3 shadow-[0_10px_24px_rgba(0,0,0,0.35)] hover:bg-[#0B0F18]/90 transition">
                     {/* delete */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onDelete(p.id);
                       }}
-                      className="absolute top-2 right-2 text-xs opacity-50 hover:opacity-100"
+                      className="absolute top-2 right-2 text-xs text-white/45 hover:text-white/90 transition"
                       title="Delete"
                     >
                       ✕
                     </button>
 
-                    <div className="text-sm font-medium truncate">
+                    <div className="text-sm font-medium truncate text-white">
                       🐎 {p.customer_detail ?? "No customer"}
                     </div>
-                    <div className="text-xs text-neutral-400 truncate">
+                    <div className="text-xs text-white/55 truncate">
                       {p.project_info ?? "No info"}
                     </div>
 
-                    {/* badges row */}
-                    <div className="mt-2 flex items-center gap-2">
+                    {/* badges */}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       {amountMissing ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-400/30 text-amber-300 bg-amber-400/10">
-                          ⚠ Amount required
-                        </span>
+                        <Pill tone="warn">⚠ Amount required</Pill>
                       ) : null}
 
                       {showAmount ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/10 text-neutral-200 bg-white/5">
-                          {fmtMoney(Number(p.amount))}
-                        </span>
+                        <Pill tone="amount">{fmtMoney(Number(p.amount))}</Pill>
                       ) : null}
 
                       {showCloseBadge ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/10 text-neutral-200 bg-white/5">
-                          {closeText}
-                        </span>
+                        <Pill tone={p.close_status === "won" ? "won" : "lost"}>
+                          {p.close_status === "won" ? "✅" : "❌"} {closeText}
+                        </Pill>
                       ) : null}
                     </div>
 
-                    {/* bottom row: left label + right controls */}
+                    {/* bottom row */}
                     <div className="mt-3 flex items-center justify-between">
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-white/45">
                         {isClosing ? "Closing (final)" : p.stage}
                       </div>
 
                       {isClosing ? (
                         canShowReasonButton ? (
-                          <button
+                          <GhostBtn
                             onClick={(e) => {
                               e.stopPropagation();
                               openReason(p);
                             }}
-                            className="text-xs border border-white/20 px-2 py-1 rounded-md hover:bg-white/10"
                           >
                             Reason
-                          </button>
+                          </GhostBtn>
                         ) : (
-                          <span className="text-xs text-neutral-500">Final</span>
+                          <span className="text-xs text-white/45">Final</span>
                         )
                       ) : (
                         <div className="flex gap-2">
-                          <button
+                          <GhostBtn
                             disabled={!prev}
                             onClick={() => prev && onMove(p.id, prev)}
-                            className="text-xs border border-white/20 px-2 py-1 rounded-md disabled:opacity-30"
                             title="Back"
                           >
                             ◀
-                          </button>
-                          <button
+                          </GhostBtn>
+                          <GhostBtn
                             disabled={!next}
                             onClick={() => next && onMove(p.id, next)}
-                            className="text-xs border border-white/20 px-2 py-1 rounded-md disabled:opacity-30"
                             title="Next"
                           >
                             ▶
-                          </button>
+                          </GhostBtn>
                         </div>
                       )}
                     </div>
@@ -277,107 +359,91 @@ export function HorseRaceLineV2({
           })}
 
           {projects.length === 0 ? (
-            <div className="text-sm text-neutral-500">No horses yet.</div>
+            <div className="text-sm text-white/50">No horses yet.</div>
           ) : null}
         </div>
       </div>
 
-      {/* ✅ Reason modal (view + edit) */}
+      {/* Reason modal (view + edit) */}
       {reasonTarget ? (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <div className="w-[520px] max-w-[92vw] rounded-2xl border border-white/15 bg-black p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm font-semibold">Lost reason</div>
-                <div className="mt-1 text-xs text-neutral-400">
-                  🐎 {reasonTarget.customer_detail ?? "No customer"} —{" "}
-                  {reasonTarget.project_info ?? "No info"}
-                </div>
-              </div>
-
-              <button
-                onClick={closeReason}
-                className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
-              >
-                Close
-              </button>
+        <ModalShell
+          title="Lost reason"
+          subtitle={`🐎 ${reasonTarget.customer_detail ?? "No customer"} — ${
+            reasonTarget.project_info ?? "No info"
+          }`}
+          onClose={closeReason}
+        >
+          {reasonErr ? (
+            <div className="mb-3 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-xs text-rose-200">
+              {reasonErr}
             </div>
+          ) : null}
 
-            {reasonErr ? (
-              <div className="mt-3 text-xs text-red-400">{reasonErr}</div>
-            ) : null}
+          {!isEditingReason ? (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+              <div className="text-xs text-white/55 mb-2">Reason</div>
+              <div className="text-sm whitespace-pre-wrap text-white/90">
+                {reasonText || "No reason saved."}
+              </div>
+            </div>
+          ) : (
+            <textarea
+              className="w-full min-h-[150px] rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-white outline-none focus:border-white/20"
+              value={reasonDraft}
+              onChange={(e) => setReasonDraft(e.target.value)}
+              placeholder="Why was this project lost?"
+            />
+          )}
 
+          <div className="mt-4 flex justify-end gap-2">
             {!isEditingReason ? (
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                <div className="text-xs text-neutral-400 mb-2">Reason</div>
-                <div className="text-sm whitespace-pre-wrap">
-                  {reasonText || "No reason saved."}
-                </div>
-              </div>
+              <GhostBtn onClick={() => setIsEditingReason(true)}>Edit</GhostBtn>
             ) : (
-              <textarea
-                className="mt-4 w-full min-h-[140px] rounded-xl border border-white/20 bg-transparent p-3 text-sm outline-none"
-                value={reasonDraft}
-                onChange={(e) => setReasonDraft(e.target.value)}
-                placeholder="Why was this project lost?"
-              />
-            )}
-
-            <div className="mt-4 flex justify-end gap-2">
-              {!isEditingReason ? (
-                <button
-                  onClick={() => setIsEditingReason(true)}
-                  className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
+              <>
+                <GhostBtn
+                  disabled={savingReason}
+                  onClick={() => {
+                    setIsEditingReason(false);
+                    setReasonDraft(reasonTarget.lost_reason ?? "");
+                    setReasonErr(null);
+                  }}
                 >
-                  Edit
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
+                  Cancel
+                </GhostBtn>
+
+                <GhostBtn
+                  disabled={savingReason}
+                  onClick={async () => {
+                    setReasonErr(null);
+                    const nextReason = reasonDraft.trim();
+                    if (!nextReason) {
+                      setReasonErr("Reason is required.");
+                      return;
+                    }
+
+                    setSavingReason(true);
+                    try {
+                      await onSaveReason(reasonTarget.id, nextReason);
+
+                      // ✅ update modal immediately (fix “still old value”)
+                      setReasonTarget((prev) =>
+                        prev ? { ...prev, lost_reason: nextReason } : prev
+                      );
+
                       setIsEditingReason(false);
-                      setReasonDraft(reasonTarget.lost_reason ?? "");
-                      setReasonErr(null);
-                    }}
-                    className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
-                    disabled={savingReason}
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    onClick={async () => {
-                      setReasonErr(null);
-                      const nextReason = reasonDraft.trim();
-                      if (!nextReason) {
-                        setReasonErr("Reason is required.");
-                        return;
-                      }
-
-                      setSavingReason(true);
-                      try {
-                        await onSaveReason(reasonTarget.id, nextReason);
-                        // keep modal open but exit edit mode; refresh displayed reason
-                        setReasonTarget((prev) =>
-                          prev ? { ...prev, lost_reason: nextReason } : prev
-                        );
-                        setIsEditingReason(false);
-                      } catch (e: any) {
-                        setReasonErr(e?.message ?? "Failed to save reason.");
-                      } finally {
-                        setSavingReason(false);
-                      }
-                    }}
-                    className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
-                    disabled={savingReason}
-                  >
-                    {savingReason ? "Saving..." : "Save"}
-                  </button>
-                </>
-              )}
-            </div>
+                    } catch (e: any) {
+                      setReasonErr(e?.message ?? "Failed to save reason.");
+                    } finally {
+                      setSavingReason(false);
+                    }
+                  }}
+                >
+                  {savingReason ? "Saving..." : "Save"}
+                </GhostBtn>
+              </>
+            )}
           </div>
-        </div>
+        </ModalShell>
       ) : null}
     </>
   );

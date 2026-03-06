@@ -23,6 +23,9 @@ type Project = {
   lost_reason?: string | null;
 };
 
+// =========================
+// Theme helpers (A: Graphite + Neon Accent)
+// =========================
 function fmtMoney(n: number) {
   try {
     return new Intl.NumberFormat("en-US", {
@@ -61,7 +64,8 @@ function calcStats(projects: Project[]) {
     byStage[p.stage]++;
 
     const isFinal =
-      p.stage === "Closing" && (p.close_status === "won" || p.close_status === "lost");
+      p.stage === "Closing" &&
+      (p.close_status === "won" || p.close_status === "lost");
 
     if (!isFinal) active++;
     if (p.close_status === "won") won++;
@@ -82,23 +86,40 @@ function StatChip({
 }: {
   label: string;
   value: React.ReactNode;
-  tone?: "default" | "good" | "bad" | "info";
+  tone?: "default" | "active" | "won" | "lost" | "amount";
 }) {
-  const toneCls =
-    tone === "good"
-      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
-      : tone === "bad"
-      ? "border-red-400/20 bg-red-400/10 text-red-200"
-      : tone === "info"
-      ? "border-sky-400/20 bg-sky-400/10 text-sky-200"
-      : "border-white/15 bg-white/5 text-neutral-200";
+  const toneClass =
+    tone === "active"
+      ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-200"
+      : tone === "won"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+      : tone === "lost"
+      ? "border-rose-400/25 bg-rose-400/10 text-rose-200"
+      : tone === "amount"
+      ? "border-blue-400/25 bg-blue-400/10 text-blue-200"
+      : "border-white/10 bg-white/[0.04] text-white/85";
 
   return (
     <div
-      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${toneCls}`}
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${toneClass}`}
     >
       <span className="opacity-80">{label}</span>
       <span className="font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function StageCountCell({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md px-4 py-3 text-center shadow-[0_8px_24px_rgba(0,0,0,0.25)] hover:bg-white/[0.05] transition">
+      <div className="text-xs text-white/45">{label}</div>
+      <div className="text-2xl font-semibold text-white">{value}</div>
     </div>
   );
 }
@@ -113,7 +134,7 @@ export default function BossPage() {
 
   const router = useRouter();
 
-  // ✅ 用同一套 gridTemplateColumns 让 “summary 表格” 和 “lanes 表格”对齐
+  // ✅ Use the same grid columns as lanes (align summary + lanes)
   const LANE_COL_PX = 200;
   const GRID_COLS = `${LANE_COL_PX}px repeat(${STAGES.length}, minmax(120px, 1fr))`;
 
@@ -138,7 +159,6 @@ export default function BossPage() {
     const list = (data ?? []) as Project[];
     setProjects(list);
 
-    // Fetch display names for lanes
     const ownerIds = Array.from(new Set(list.map((p) => p.owner_user_id)));
 
     if (ownerIds.length === 0) {
@@ -162,7 +182,6 @@ export default function BossPage() {
     for (const row of profilesData ?? []) {
       map[row.user_id] = row.display_name ?? `sales-${row.user_id.slice(0, 8)}`;
     }
-    // 兜底：没 profile 的也给个名字
     for (const id of ownerIds) {
       if (!map[id]) map[id] = `sales-${id.slice(0, 8)}`;
     }
@@ -206,7 +225,6 @@ export default function BossPage() {
       return { ownerId, name, projects: list, stats };
     });
 
-    // 让列表稳定、好看：按 name 排序
     items.sort((a, b) => a.name.localeCompare(b.name));
     return items;
   }, [projects, ownerNameMap]);
@@ -217,63 +235,62 @@ export default function BossPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6">
+    <div className="min-h-screen p-6 space-y-6 bg-gradient-to-b from-[#070A0F] via-[#0A0F1A] to-[#0B1020] text-white">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Boss Dashboard</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Boss Dashboard</h1>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => router.push("/trash")}
-            className="text-sm px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
+            className="text-sm px-3 py-1.5 rounded-md border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] transition"
           >
             ♻ Recycle Bin
           </button>
 
           <button
             onClick={signOut}
-            className="text-sm px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
+            className="text-sm px-3 py-1.5 rounded-md border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] transition"
           >
             Sign out
           </button>
         </div>
       </div>
 
-      {err ? <div className="text-sm text-red-500">{err}</div> : null}
-      {loading ? <div className="text-neutral-300">Loading...</div> : null}
+      {err ? <div className="text-sm text-rose-300">{err}</div> : null}
+      {loading ? <div className="text-white/60">Loading...</div> : null}
 
       {/* =========================
-          Global Summary (bar)
+          Global Summary
          ========================= */}
-      <div className="rounded-2xl border border-white/10 bg-black/20 px-5 py-4">
-        <div className="text-sm font-semibold">Global summary</div>
-        {/* <div className="text-xs text-neutral-400 mt-1">
-          Total {globalStats.total} · Active {globalStats.active} · Won {globalStats.won} · Lost{" "}
-          {globalStats.lost} · Amount {fmtMoney(globalStats.amountTotal)}
-        </div> */}
-        <div className="mt-2 text-[11px] text-neutral-500">
-          Pipeline overview
-        </div>
-        <div className="flex flex-wrap items-center gap-2 mt-2">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md px-5 py-4 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+        <div className="text-lg font-semibold text-white">Global summary</div>
+        <div className="mt-1 text-sm text-white/55">Pipeline overview</div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
           <StatChip label="Total" value={globalStats.total} />
-          <StatChip label="Active" value={globalStats.active} tone="info" />
-          <StatChip label="Won" value={globalStats.won} tone="good" />
-          <StatChip label="Lost" value={globalStats.lost} tone="bad" />
-          <StatChip label="Amount" value={fmtMoney(globalStats.amountTotal)} />
+          <StatChip label="Active" value={globalStats.active} tone="active" />
+          <StatChip label="Won" value={globalStats.won} tone="won" />
+          <StatChip label="Lost" value={globalStats.lost} tone="lost" />
+          <StatChip
+            label="Amount"
+            value={fmtMoney(globalStats.amountTotal)}
+            tone="amount"
+          />
         </div>
 
         {/* Global stage counts aligned */}
-        <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: GRID_COLS }}>
-          <div className="text-xs text-neutral-500 flex items-center">All sales</div>
+        <div className="mt-5 grid gap-3" style={{ gridTemplateColumns: GRID_COLS }}>
+          <div className="text-xs text-white/45 flex items-center">
+            All sales
+          </div>
 
           {STAGES.map((stage) => (
-            <div
+            <StageCountCell
               key={stage}
-              className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center"
-            >
-              <div className="text-xs text-neutral-500">{stage}</div>
-              <div className="text-2xl font-bold">{globalStats.byStage[stage]}</div>
-            </div>
+              label={stage}
+              value={globalStats.byStage[stage]}
+            />
           ))}
         </div>
       </div>
@@ -286,42 +303,46 @@ export default function BossPage() {
           const oneOwnerNameMap: Record<string, string> = { [g.ownerId]: g.name };
 
           return (
-            <div key={g.ownerId} className="rounded-2xl border border-white/10 bg-black/20 p-5">
+            <div
+              key={g.ownerId}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-5 shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+            >
               {/* Sales summary bar */}
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-sm font-semibold">{g.name}</div>
-                  {/* <div className="text-xs text-neutral-400 mt-1">
-                    Total {g.stats.total} · Active {g.stats.active} · Won {g.stats.won} · Lost{" "}
-                    {g.stats.lost} · Amount {fmtMoney(g.stats.amountTotal)}
-                  </div> */}
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <div className="text-lg font-semibold text-white">{g.name}</div>
+
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
                     <StatChip label="Total" value={g.stats.total} />
-                    <StatChip label="Active" value={g.stats.active} tone="info" />
-                    <StatChip label="Won" value={g.stats.won} tone="good" />
-                    <StatChip label="Lost" value={g.stats.lost} tone="bad" />
-                    <StatChip label="Amount" value={fmtMoney(g.stats.amountTotal)} />
+                    <StatChip label="Active" value={g.stats.active} tone="active" />
+                    <StatChip label="Won" value={g.stats.won} tone="won" />
+                    <StatChip label="Lost" value={g.stats.lost} tone="lost" />
+                    <StatChip
+                      label="Amount"
+                      value={fmtMoney(g.stats.amountTotal)}
+                      tone="amount"
+                    />
                   </div>
                 </div>
               </div>
 
               {/* Sales stage counts aligned */}
-              <div className="mt-4 grid gap-3" style={{ gridTemplateColumns: GRID_COLS }}>
-                <div className="text-xs text-neutral-500 flex items-center">Stage counts</div>
+              <div className="mt-5 grid gap-3" style={{ gridTemplateColumns: GRID_COLS }}>
+                <div className="text-xs text-white/45 flex items-center">
+                  Stage counts
+                </div>
 
                 {STAGES.map((stage) => (
-                  <div
+                  <StageCountCell
                     key={stage}
-                    className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-center"
-                  >
-                    <div className="text-xs text-neutral-500">{stage}</div>
-                    <div className="text-2xl font-bold">{g.stats.byStage[stage]}</div>
-                  </div>
+                    label={stage}
+                    value={g.stats.byStage[stage]}
+                  />
                 ))}
               </div>
 
               {/* Sales lanes (only this owner) */}
-              <div className="mt-5">
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
                 <BossRaceLanes projects={g.projects} ownerNameMap={oneOwnerNameMap} />
               </div>
             </div>
@@ -329,7 +350,7 @@ export default function BossPage() {
         })}
 
         {groups.length === 0 && !loading ? (
-          <div className="text-sm text-neutral-500">No projects yet.</div>
+          <div className="text-sm text-white/50">No projects yet.</div>
         ) : null}
       </div>
     </div>

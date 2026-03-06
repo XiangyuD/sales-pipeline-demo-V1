@@ -19,7 +19,6 @@ type Project = {
   reason: string | null;
   stage: Stage;
 
-  // ✅ 新增字段（DB 里要有）
   amount: number | null;
   close_status: CloseStatus;
   lost_reason: string | null;
@@ -36,6 +35,87 @@ const NEED_AMOUNT_STAGES: Stage[] = [
   "Contract Review",
   "Closing",
 ];
+
+// ========= UI helpers (same vibe as Boss) =========
+function Card({
+  title,
+  subtitle,
+  children,
+}: {
+  title?: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-[0_8px_30px_rgba(0,0,0,0.35)] px-5 py-4">
+      {title ? <div className="text-lg font-semibold text-white">{title}</div> : null}
+      {subtitle ? <div className="mt-1 text-sm text-white/55">{subtitle}</div> : null}
+      <div className={title || subtitle ? "mt-4" : ""}>{children}</div>
+    </div>
+  );
+}
+
+function Btn({
+  children,
+  onClick,
+  disabled,
+  variant = "ghost",
+  className = "",
+  type,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  variant?: "ghost" | "solid" | "danger";
+  className?: string;
+  type?: "button" | "submit";
+}) {
+  const base =
+    "inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm transition border";
+  const style =
+    variant === "solid"
+      ? "border-white/15 bg-white text-black hover:bg-white/90"
+      : variant === "danger"
+      ? "border-rose-400/25 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15"
+      : "border-white/15 bg-white/[0.03] text-white/90 hover:bg-white/[0.08]";
+  return (
+    <button
+      type={type ?? "button"}
+      disabled={disabled}
+      onClick={onClick}
+      className={`${base} ${style} disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-white/55">{label}</div>
+      <input
+        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        type={type}
+      />
+    </div>
+  );
+}
 
 export default function SalesPage() {
   const supabase = createClient();
@@ -55,12 +135,10 @@ export default function SalesPage() {
   // delete modal (soft delete)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  // ✅ 新增：move guard 弹框
+  // move guard modal
   const [pendingMove, setPendingMove] = useState<PendingMove>(null);
 
-  const handleDeleteRequest = (id: string) => {
-    setDeleteTarget(id);
-  };
+  const handleDeleteRequest = (id: string) => setDeleteTarget(id);
 
   async function load() {
     setLoading(true);
@@ -108,17 +186,15 @@ export default function SalesPage() {
 
   async function saveLostReason(projectId: string, reason: string) {
     setErr(null);
-  
+
     const { error } = await supabase
       .from("projects")
       .update({ lost_reason: reason })
       .eq("id", projectId);
-  
-    if (error) {
-      throw new Error(error.message);
-    }
-  
-    // 推荐：本地 optimistic 更新（更快）
+
+    if (error) throw new Error(error.message);
+
+    // optimistic update
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, lost_reason: reason } : p))
     );
@@ -138,7 +214,6 @@ export default function SalesPage() {
         return;
       }
 
-      // ✅ 只有是 sales 才继续加载
       const { data: auth } = await supabase.auth.getUser();
       setMeEmail(auth.user?.email ?? "");
 
@@ -149,6 +224,7 @@ export default function SalesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // (still useful for future, keep)
   const byStage = useMemo(() => {
     const map: Record<Stage, Project[]> = {
       Lead: [],
@@ -159,11 +235,7 @@ export default function SalesPage() {
       "Contract Review": [],
       Closing: [],
     };
-
-    for (const p of projects) {
-      map[p.stage].push(p);
-    }
-
+    for (const p of projects) map[p.stage].push(p);
     return map;
   }, [projects]);
 
@@ -202,11 +274,7 @@ export default function SalesPage() {
 
   // ====== DB update helpers ======
   async function updateAmount(projectId: string, amount: number) {
-    const { error } = await supabase
-      .from("projects")
-      .update({ amount })
-      .eq("id", projectId);
-
+    const { error } = await supabase.from("projects").update({ amount }).eq("id", projectId);
     if (error) throw error;
   }
 
@@ -218,24 +286,15 @@ export default function SalesPage() {
     const payload: any = { close_status };
     payload.lost_reason = close_status === "lost" ? (lost_reason ?? "") : null;
 
-    const { error } = await supabase
-      .from("projects")
-      .update(payload)
-      .eq("id", projectId);
-
+    const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
     if (error) throw error;
   }
 
   async function moveStageDB(projectId: string, nextStage: Stage) {
-    const { error } = await supabase
-      .from("projects")
-      .update({ stage: nextStage })
-      .eq("id", projectId);
-
+    const { error } = await supabase.from("projects").update({ stage: nextStage }).eq("id", projectId);
     if (error) throw error;
   }
 
-  // ====== the function you pass to HorseRaceLineV2 ======
   async function moveStage(projectId: string, nextStage: Stage) {
     setErr(null);
 
@@ -245,19 +304,19 @@ export default function SalesPage() {
       return;
     }
 
-    // 1) Closing 是最终态，直接挡
+    // Closing is final
     if (project.stage === "Closing") {
       setErr("Closing is final. This project cannot be moved.");
       return;
     }
 
-    // 2) 进入 Closing：必须先选 won/lost(+reason)
+    // entering Closing: must pick won/lost (+reason)
     if (nextStage === "Closing") {
       setPendingMove({ kind: "close", project, nextStage });
       return;
     }
 
-    // 3) Proposal+：必须有 amount（否则弹框）
+    // Proposal+: must have amount
     if (NEED_AMOUNT_STAGES.includes(nextStage)) {
       const missingAmount =
         project.amount === null ||
@@ -270,7 +329,6 @@ export default function SalesPage() {
       }
     }
 
-    // 4) 正常移动
     try {
       setBusy(true);
       await moveStageDB(projectId, nextStage);
@@ -288,111 +346,79 @@ export default function SalesPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 space-y-6">
+    <div className="min-h-screen p-6 space-y-6 bg-gradient-to-b from-[#070A0F] via-[#0A0F1A] to-[#0B1020] text-white">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        {/* 左侧 */}
-        <h1 className="text-2xl font-semibold">Sales Dashboard</h1>
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Sales Dashboard</h1>
+          <div className="mt-1 text-sm text-white/55">{meEmail}</div>
+        </div>
 
-        {/* 右侧整体 */}
-        <div className="flex items-center gap-4">
-          <div className="text-sm opacity-70">{meEmail}</div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push("/trash")}
-              className="text-sm px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
-            >
-              ♻ Recycle Bin
-            </button>
-
-            <button
-              onClick={signOut}
-              className="text-sm px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
-            >
-              Sign out
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <Btn onClick={() => router.push("/trash")}>♻ Recycle Bin</Btn>
+          <Btn onClick={signOut}>Sign out</Btn>
         </div>
       </div>
 
-      <form
-        onSubmit={createProject}
-        className="rounded-xl border p-4 space-y-3"
-      >
-        <div className="font-medium">Create a new horse (project)</div>
+      {err ? (
+        <div className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+          {err}
+        </div>
+      ) : null}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="space-y-1">
-            <div className="text-sm text-neutral-300">Date</div>
-            <input
-              className="w-full rounded-md border bg-transparent px-3 py-2"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
+      {loading ? <div className="text-white/60">Loading...</div> : null}
 
-          <div className="space-y-1">
-            <div className="text-sm text-neutral-300">Customer detail</div>
-            <input
-              className="w-full rounded-md border bg-transparent px-3 py-2"
+      {/* Create */}
+      <Card title="Create a new horse (project)" subtitle="Quickly add a new deal into the pipeline.">
+        <form onSubmit={createProject} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Input label="Date" value={date} onChange={setDate} type="date" />
+            <Input
+              label="Customer detail"
               value={customerDetail}
-              onChange={(e) => setCustomerDetail(e.target.value)}
+              onChange={setCustomerDetail}
               placeholder="Name / company / contact..."
             />
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-sm text-neutral-300">Project info</div>
-            <input
-              className="w-full rounded-md border bg-transparent px-3 py-2"
+            <Input
+              label="Project info"
               value={projectInfo}
-              onChange={(e) => setProjectInfo(e.target.value)}
+              onChange={setProjectInfo}
               placeholder="What is this project about?"
             />
           </div>
-        </div>
 
-        <button className="rounded-md bg-white text-black px-4 py-2 text-sm font-medium">
-          Create
-        </button>
-      </form>
+          <div className="flex items-center justify-end gap-2">
+            <Btn type="submit" variant="solid">
+              Create
+            </Btn>
+          </div>
+        </form>
+      </Card>
 
-      {err ? <div className="text-sm text-red-500">{err}</div> : null}
-      {loading ? <div className="text-neutral-300">Loading...</div> : null}
-
-      <HorseRaceLineV2
-        projects={projects}
-        onMove={moveStage}
-        onDelete={handleDeleteRequest}
-        onSaveReason={saveLostReason}
-      />
+      {/* Track */}
+      <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+        <HorseRaceLineV2
+          projects={projects}
+          onMove={moveStage}
+          onDelete={handleDeleteRequest}
+          onSaveReason={saveLostReason}
+        />
+      </div>
 
       {/* ===== Delete confirm modal (soft delete) ===== */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-black border border-white/20 rounded-xl p-6 w-80">
-            <div className="text-sm">
-              Are you sure you want to delete this horse?
-            </div>
-
-            <div className="mt-4 flex justify-end gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="text-xs px-3 py-1 border rounded-md"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={confirmDelete}
-                className="text-xs px-3 py-1 border border-red-500 text-red-400 rounded-md"
-              >
-                Delete
-              </button>
-            </div>
+        <ModalShell title="Delete this horse?" onClose={() => setDeleteTarget(null)}>
+          <div className="text-sm text-white/70">
+            This will move the project to the Recycle Bin.
           </div>
-        </div>
+
+          <div className="mt-5 flex justify-end gap-2">
+            <Btn onClick={() => setDeleteTarget(null)}>Cancel</Btn>
+            <Btn variant="danger" onClick={confirmDelete}>
+              Delete
+            </Btn>
+          </div>
+        </ModalShell>
       )}
 
       {/* ===== Amount modal ===== */}
@@ -449,6 +475,33 @@ export default function SalesPage() {
   );
 }
 
+// ===================== Modal shell =====================
+function ModalShell({
+  title,
+  onClose,
+  children,
+  widthClass = "max-w-md",
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  widthClass?: string;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div
+        className={`w-full ${widthClass} rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_18px_60px_rgba(0,0,0,0.55)]`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-lg font-semibold text-white">{title}</div>
+          <Btn onClick={onClose}>Close</Btn>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== Modals =====================
 
 function AmountModal({
@@ -464,55 +517,43 @@ function AmountModal({
   onCancel: () => void;
   onConfirm: (amount: number) => void;
 }) {
-  const [val, setVal] = useState<string>(
-    project.amount?.toString() ?? ""
-  );
+  const [val, setVal] = useState<string>(project.amount?.toString() ?? "");
 
   const amountNum = Number(val);
   const invalid = !Number.isFinite(amountNum) || amountNum <= 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-950 p-5 shadow-xl">
-        <div className="text-lg font-semibold">Amount required</div>
-        <div className="mt-1 text-sm text-neutral-400">
-          This project is moving to{" "}
-          <span className="text-neutral-200">{nextStage}</span>. Please enter
-          the deal amount.
-        </div>
-
-        <div className="mt-4">
-          <label className="text-xs text-neutral-400">Amount (USD)</label>
-          <input
-            value={val}
-            onChange={(e) => setVal(e.target.value)}
-            placeholder="e.g. 25000"
-            inputMode="decimal"
-            className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-neutral-100 outline-none focus:border-white/20"
-          />
-          {invalid ? (
-            <div className="mt-2 text-xs text-red-400">Amount must be &gt; 0.</div>
-          ) : null}
-        </div>
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            disabled={busy}
-            onClick={onCancel}
-            className="rounded-xl border border-white/10 px-3 py-2 text-sm text-neutral-200 opacity-80 hover:opacity-100 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={busy || invalid}
-            onClick={() => onConfirm(amountNum)}
-            className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-neutral-100 hover:bg-white/15 disabled:opacity-50"
-          >
-            Confirm
-          </button>
-        </div>
+    <ModalShell title="Amount required" onClose={onCancel}>
+      <div className="text-sm text-white/65">
+        This project is moving to <span className="text-white">{nextStage}</span>. Please enter the
+        deal amount.
       </div>
-    </div>
+
+      <div className="mt-4">
+        <div className="text-xs text-white/55">Amount (USD)</div>
+        <input
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="e.g. 25000"
+          inputMode="decimal"
+          className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+        />
+        {invalid ? <div className="mt-2 text-xs text-rose-200">Amount must be &gt; 0.</div> : null}
+      </div>
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Btn disabled={busy} onClick={onCancel}>
+          Cancel
+        </Btn>
+        <Btn
+          disabled={busy || invalid}
+          variant="solid"
+          onClick={() => onConfirm(amountNum)}
+        >
+          Confirm
+        </Btn>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -536,73 +577,65 @@ function CloseModal({
   const reasonInvalid = needReason && reason.trim().length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-neutral-950 p-5 shadow-xl">
-        <div className="text-lg font-semibold">Close this project</div>
-        <div className="mt-1 text-sm text-neutral-400">
-          Choose the outcome. Closing is final (stage cannot be changed later).
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <button
-            disabled={busy}
-            onClick={() => setStatus("won")}
-            className={`flex-1 rounded-xl border px-3 py-2 text-sm ${
-              status === "won"
-                ? "border-white/20 bg-white/10 text-white"
-                : "border-white/10 text-neutral-300 hover:bg-white/5"
-            }`}
-          >
-            Won
-          </button>
-          <button
-            disabled={busy}
-            onClick={() => setStatus("lost")}
-            className={`flex-1 rounded-xl border px-3 py-2 text-sm ${
-              status === "lost"
-                ? "border-white/20 bg-white/10 text-white"
-                : "border-white/10 text-neutral-300 hover:bg-white/5"
-            }`}
-          >
-            Lost
-          </button>
-        </div>
-
-        {status === "lost" ? (
-          <div className="mt-4">
-            <label className="text-xs text-neutral-400">Reason (required)</label>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={3}
-              className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-neutral-100 outline-none focus:border-white/20"
-              placeholder="Why was it lost?"
-            />
-            {reasonInvalid ? (
-              <div className="mt-2 text-xs text-red-400">
-                Reason is required for Lost.
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            disabled={busy}
-            onClick={onCancel}
-            className="rounded-xl border border-white/10 px-3 py-2 text-sm text-neutral-200 opacity-80 hover:opacity-100 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={busy || reasonInvalid}
-            onClick={() => onConfirm(status, reason)}
-            className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-neutral-100 hover:bg-white/15 disabled:opacity-50"
-          >
-            Confirm & Close
-          </button>
-        </div>
+    <ModalShell title="Close this project" onClose={onCancel}>
+      <div className="text-sm text-white/65">
+        Choose the outcome. <span className="text-white">Closing is final</span> (stage cannot be
+        changed later).
       </div>
-    </div>
+
+      <div className="mt-4 flex gap-2">
+        <button
+          disabled={busy}
+          onClick={() => setStatus("won")}
+          className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
+            status === "won"
+              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+              : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
+          } disabled:opacity-50`}
+        >
+          ✅ Won
+        </button>
+        <button
+          disabled={busy}
+          onClick={() => setStatus("lost")}
+          className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
+            status === "lost"
+              ? "border-rose-400/25 bg-rose-400/10 text-rose-200"
+              : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
+          } disabled:opacity-50`}
+        >
+          ❌ Lost
+        </button>
+      </div>
+
+      {status === "lost" ? (
+        <div className="mt-4">
+          <div className="text-xs text-white/55">Reason (required)</div>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            placeholder="Why was it lost?"
+          />
+          {reasonInvalid ? (
+            <div className="mt-2 text-xs text-rose-200">Reason is required for Lost.</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <Btn disabled={busy} onClick={onCancel}>
+          Cancel
+        </Btn>
+        <Btn
+          disabled={busy || reasonInvalid}
+          variant="solid"
+          onClick={() => onConfirm(status, reason)}
+        >
+          Confirm & Close
+        </Btn>
+      </div>
+    </ModalShell>
   );
 }
