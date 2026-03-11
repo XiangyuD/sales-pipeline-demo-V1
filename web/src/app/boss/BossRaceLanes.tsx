@@ -3,6 +3,7 @@
 import { STAGES, type Stage } from "@/lib/stages";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { createClient } from "@/lib/supabase/client";
 
 type CloseStatus = "won" | "lost" | null;
 
@@ -17,6 +18,15 @@ type Project = {
   amount?: number | null;
   close_status?: CloseStatus;
   lost_reason?: string | null;
+};
+
+type StageLog = {
+  id: string;
+  project_id: string;
+  stage: Stage;
+  entered_at: string;
+  comment: string | null;
+  created_at: string;
 };
 
 const SHOW_AMOUNT_STAGES: Stage[] = [
@@ -38,30 +48,102 @@ function fmtMoney(n: number) {
   }
 }
 
+function diffDays(from: string, to: string) {
+  const a = new Date(from + "T00:00:00");
+  const b = new Date(to + "T00:00:00");
+  const ms = b.getTime() - a.getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24));
+}
+
+function AmountBadge({ amount }: { amount: number }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-[11px] font-medium text-sky-200 shadow-[0_0_0_1px_rgba(56,189,248,0.06)]">
+      {fmtMoney(amount)}
+    </span>
+  );
+}
+
+function StatusBadge({ status }: { status: "won" | "lost" }) {
+  const cls =
+    status === "won"
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-[0_0_0_1px_rgba(52,211,153,0.06)]"
+      : "border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-[0_0_0_1px_rgba(251,113,133,0.06)]";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${cls}`}
+    >
+      {status === "won" ? "✅ Won" : "❌ Lost"}
+    </span>
+  );
+}
+
+function InfoButton({
+  onClick,
+  children = "Info",
+}: {
+  onClick: () => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="text-xs border border-white/15 bg-white/[0.03] px-2.5 py-1 rounded-md text-white/80 hover:bg-white/[0.08] hover:text-white transition"
+    >
+      {children}
+    </button>
+  );
+}
+
 export function BossRaceLanes(props: {
   projects: Project[];
   ownerNameMap: Record<string, string>;
 }) {
   const { projects, ownerNameMap } = props;
+  const supabase = createClient();
 
-  // ✅ Reason modal state (boss read-only)
-  const [reasonTarget, setReasonTarget] = useState<Project | null>(null);
+  const [infoTarget, setInfoTarget] = useState<Project | null>(null);
+  const [logs, setLogs] = useState<StageLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsErr, setLogsErr] = useState<string | null>(null);
 
-  const[mounted, setMounted] = useState(false);
-  
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const reasonText = useMemo(() => {
-    return (reasonTarget?.lost_reason ?? "").trim();
-  }, [reasonTarget]);
+  async function openInfo(project: Project) {
+    setInfoTarget(project);
+    setLogs([]);
+    setLogsErr(null);
+    setLogsLoading(true);
 
-  // Group projects by owner_user_id (each owner = one lane)
+    const { data, error } = await supabase
+      .from("project_stage_logs")
+      .select("id, project_id, stage, entered_at, comment, created_at")
+      .eq("project_id", project.id)
+      .order("entered_at", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setLogsErr(error.message);
+      setLogsLoading(false);
+      return;
+    }
+
+    setLogs((data ?? []) as StageLog[]);
+    setLogsLoading(false);
+  }
+
+  const leadDate = useMemo(() => {
+    const lead = logs.find((l) => l.stage === "Lead");
+    return lead?.entered_at ?? null;
+  }, [logs]);
+
   const owners = Array.from(new Set(projects.map((p) => p.owner_user_id)));
   owners.sort((a, b) => a.localeCompare(b));
 
-  // Build a lookup: owner -> stage -> projects[]
   const laneMap: Record<string, Record<Stage, Project[]>> = {};
   for (const owner of owners) {
     laneMap[owner] = {
@@ -85,9 +167,7 @@ export function BossRaceLanes(props: {
         <div className="min-w-[1100px]">
           {/* Header row */}
           <div className="grid grid-cols-[180px_repeat(7,minmax(120px,1fr))] gap-2 mb-3">
-            <div className="text-sm font-medium text-white/80">
-              Sales (Lane)
-            </div>
+            <div className="text-sm font-medium text-white/80">Sales (Lane)</div>
             {STAGES.map((s, idx) => (
               <div key={s} className="text-center">
                 <div className="text-xs text-white/40">Stage {idx + 1}</div>
@@ -112,8 +192,7 @@ export function BossRaceLanes(props: {
                     {owner.slice(0, 8)}
                   </div>
                   <div className="mt-2 text-xs text-white/55">
-                    {projects.filter((p) => p.owner_user_id === owner).length}{" "}
-                    horses
+                    {projects.filter((p) => p.owner_user_id === owner).length} horses
                   </div>
                 </div>
 
@@ -134,67 +213,38 @@ export function BossRaceLanes(props: {
 
                           const showCloseStatus =
                             p.stage === "Closing" &&
-                            (p.close_status === "won" ||
-                              p.close_status === "lost");
-
-                          const canShowReasonButton =
-                            p.stage === "Closing" &&
-                            p.close_status === "lost" &&
-                            (p.lost_reason ?? "").trim().length > 0;
+                            (p.close_status === "won" || p.close_status === "lost");
 
                           return (
                             <div
                               key={p.id}
-                              className="rounded-lg border border-white/10 bg-[#0B0F18]/70 p-2"
+                              className="group rounded-xl border border-white/10 bg-[#0B0F18]/78 p-3 transition duration-200 hover:border-sky-400/25 hover:bg-[#0E1422]/90 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.08),0_12px_30px_rgba(2,12,27,0.45)]"
                             >
-                              {/* Top row: date + badges */}
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="text-xs text-white/55">
-                                  🐎 {p.date ?? "No date"}
-                                </div>
-
-                                <div className="flex flex-wrap items-center justify-end gap-1">
-                                  {showAmount ? (
-                                    <span className="shrink-0 inline-flex items-center rounded-full border border-blue-400/25 bg-blue-400/10 px-2 py-0.5 text-[11px] text-blue-200">
-                                      {fmtMoney(Number(p.amount))}
-                                    </span>
-                                  ) : null}
-
-                                  {showCloseStatus ? (
-                                    <span
-                                      className={`shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${
-                                        p.close_status === "won"
-                                          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-                                          : "border-rose-400/25 bg-rose-400/10 text-rose-200"
-                                      }`}
-                                    >
-                                      {p.close_status === "won"
-                                        ? "✅ Won"
-                                        : "❌ Lost"}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-
-                              <div className="mt-1 text-sm text-white/90">
+                              {/* Customer */}
+                              <div className="text-[13px] font-semibold text-white truncate">
                                 {p.customer_detail ?? "No customer"}
                               </div>
 
-                              <div className="text-xs text-white/65 line-clamp-2">
+                              {/* Project info */}
+                              <div className="mt-1 text-xs text-white/60 line-clamp-2 min-h-[32px]">
                                 {p.project_info ?? "No info"}
                               </div>
 
-                              {/* ✅ Bottom row: right-bottom Reason button (boss read-only) */}
-                              {canShowReasonButton ? (
-                                <div className="mt-2 flex justify-end">
-                                  <button
-                                    onClick={() => setReasonTarget(p)}
-                                    className="text-xs border border-white/20 px-2 py-1 rounded-md hover:bg-white/10 transition text-white/80"
-                                  >
-                                    Reason
-                                  </button>
-                                </div>
-                              ) : null}
+                              {/* Amount + status */}
+                              <div className="mt-3 flex flex-wrap items-center gap-2 min-h-[30px]">
+                                {showAmount ? (
+                                  <AmountBadge amount={Number(p.amount)} />
+                                ) : null}
+
+                                {showCloseStatus ? (
+                                  <StatusBadge status={p.close_status as "won" | "lost"} />
+                                ) : null}
+                              </div>
+
+                              {/* Bottom action row */}
+                              <div className="mt-3 flex justify-end">
+                                <InfoButton onClick={() => openInfo(p)} />
+                              </div>
                             </div>
                           );
                         })}
@@ -220,38 +270,151 @@ export function BossRaceLanes(props: {
         </div>
       </div>
 
-      {/* ✅ Reason modal (boss read-only) */}
-      {mounted && reasonTarget
+      {/* Info modal */}
+      {mounted && infoTarget
         ? createPortal(
-            <div className="fixed inset-0 z-[9999] bg-black/60">
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] max-w-[92vw] rounded-2xl border border-white/15 bg-black p-5 shadow-xl">
+            <div
+              className="fixed inset-0 z-[9999] bg-black/60"
+              onClick={() => setInfoTarget(null)}
+            >
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[94vw] max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#090D14] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <div className="text-sm font-semibold">Lost reason</div>
+                    <div className="text-lg font-semibold text-white">Project info</div>
                     <div className="mt-1 text-xs text-white/55">
-                      🐎 {reasonTarget.customer_detail ?? "No customer"} —{" "}
-                      {reasonTarget.project_info ?? "No info"}
+                      🐎 {infoTarget.customer_detail ?? "No customer"} —{" "}
+                      {infoTarget.project_info ?? "No info"}
                     </div>
                   </div>
 
                   <button
-                    onClick={() => setReasonTarget(null)}
+                    onClick={() => setInfoTarget(null)}
                     className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
                   >
                     Close
                   </button>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-white/50 mb-2">Reason</div>
-                  <div className="text-sm whitespace-pre-wrap text-white/90">
-                    {reasonText || "No reason saved."}
+                {/* Summary */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <div className="text-xs text-white/45">Current stage</div>
+                    <div className="mt-1 text-sm text-white/90">
+                      {infoTarget.stage}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <div className="text-xs text-white/45">Amount</div>
+                    <div className="mt-1 text-sm text-white/90">
+                      {infoTarget.amount != null && Number(infoTarget.amount) > 0
+                        ? fmtMoney(Number(infoTarget.amount))
+                        : "—"}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                    <div className="text-xs text-white/45">Outcome</div>
+                    <div className="mt-1 text-sm text-white/90">
+                      {infoTarget.stage === "Closing"
+                        ? infoTarget.close_status === "won"
+                          ? "Won"
+                          : infoTarget.close_status === "lost"
+                          ? "Lost"
+                          : "Closing"
+                        : "In progress"}
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-end">
+                {/* Lost reason */}
+                {infoTarget.stage === "Closing" &&
+                infoTarget.close_status === "lost" &&
+                (infoTarget.lost_reason ?? "").trim() ? (
+                  <div className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 p-4">
+                    <div className="text-xs text-rose-200/80 mb-2">
+                      Lost reason
+                    </div>
+                    <div className="text-sm text-rose-100 whitespace-pre-wrap">
+                      {infoTarget.lost_reason}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Timeline */}
+                <div className="mt-5">
+                  <div className="text-sm font-semibold text-white">Timeline</div>
+
+                  {logsLoading ? (
+                    <div className="mt-3 text-sm text-white/55">
+                      Loading stage history...
+                    </div>
+                  ) : logsErr ? (
+                    <div className="mt-3 text-sm text-rose-300">{logsErr}</div>
+                  ) : logs.length === 0 ? (
+                    <div className="mt-3 text-sm text-white/45">
+                      No stage history yet.
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-3">
+                      {logs.map((log, idx) => {
+                        const daysFromLead =
+                          leadDate && log.entered_at
+                            ? diffDays(leadDate, log.entered_at)
+                            : null;
+
+                        const isLast = idx === logs.length - 1;
+
+                        return (
+                          <div key={log.id} className="flex gap-3">
+                            {/* timeline line */}
+                            <div className="flex flex-col items-center pt-1">
+                              <div className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.45)]" />
+                              {!isLast ? (
+                                <div className="mt-1 w-px flex-1 bg-white/10 min-h-[48px]" />
+                              ) : null}
+                            </div>
+
+                            {/* content */}
+                            <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-medium text-white/90">
+                                    {log.stage}
+                                  </div>
+                                  <div className="mt-1 text-xs text-white/50">
+                                    {log.entered_at}
+                                    {daysFromLead != null
+                                      ? daysFromLead === 0
+                                        ? " · Day 0"
+                                        : ` · +${daysFromLead} day${daysFromLead > 1 ? "s" : ""}`
+                                      : ""}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
+                                <div className="text-xs text-white/45 mb-1">
+                                  Comment
+                                </div>
+                                <div className="text-sm text-white/85 whitespace-pre-wrap">
+                                  {log.comment?.trim() ? log.comment : "—"}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-5 flex justify-end">
                   <button
-                    onClick={() => setReasonTarget(null)}
+                    onClick={() => setInfoTarget(null)}
                     className="text-xs px-3 py-1 border border-white/20 rounded-md hover:bg-white/10 transition"
                   >
                     OK

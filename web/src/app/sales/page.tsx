@@ -25,6 +25,7 @@ type Project = {
 };
 
 type PendingMove =
+  | { kind: "stage"; project: Project; nextStage: Stage }
   | { kind: "amount"; project: Project; nextStage: Stage }
   | { kind: "close"; project: Project; nextStage: Stage }
   | null;
@@ -194,7 +195,6 @@ export default function SalesPage() {
 
     if (error) throw new Error(error.message);
 
-    // optimistic update
     setProjects((prev) =>
       prev.map((p) => (p.id === projectId ? { ...p, lost_reason: reason } : p))
     );
@@ -224,7 +224,7 @@ export default function SalesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // (still useful for future, keep)
+  // currently not used in UI, but keep
   const byStage = useMemo(() => {
     const map: Record<Stage, Project[]> = {
       Lead: [],
@@ -250,21 +250,35 @@ export default function SalesPage() {
       return;
     }
 
-    const { error } = await supabase.from("projects").insert({
-      owner_user_id: user.id,
-      date: date || null,
-      customer_detail: customerDetail || null,
-      project_info: projectInfo || null,
-      stage: "Lead",
-      amount: null,
-      close_status: null,
-      lost_reason: null,
-    });
+    const { data: inserted, error } = await supabase
+      .from("projects")
+      .insert({
+        owner_user_id: user.id,
+        date: date || null,
+        customer_detail: customerDetail || null,
+        project_info: projectInfo || null,
+        stage: "Lead",
+        amount: null,
+        close_status: null,
+        lost_reason: null,
+      })
+      .select("id")
+      .single();
 
     if (error) {
       setErr(error.message);
       return;
     }
+
+    // optional but recommended: create initial Lead log
+    const initialDate = date || new Date().toISOString().slice(0, 10);
+    await supabase.from("project_stage_logs").insert({
+      project_id: inserted.id,
+      stage: "Lead",
+      entered_at: initialDate,
+      comment: "Initial project created",
+      created_by: user.id,
+    });
 
     setDate("");
     setCustomerDetail("");
@@ -274,7 +288,30 @@ export default function SalesPage() {
 
   // ====== DB update helpers ======
   async function updateAmount(projectId: string, amount: number) {
-    const { error } = await supabase.from("projects").update({ amount }).eq("id", projectId);
+    const { error } = await supabase
+      .from("projects")
+      .update({ amount })
+      .eq("id", projectId);
+
+    if (error) throw error;
+  }
+
+  async function insertStageLog(
+    projectId: string,
+    stage: Stage,
+    enteredAt: string,
+    comment: string
+  ) {
+    const { data: auth } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("project_stage_logs").insert({
+      project_id: projectId,
+      stage,
+      entered_at: enteredAt,
+      comment: comment.trim() || null,
+      created_by: auth.user?.id ?? null,
+    });
+
     if (error) throw error;
   }
 
@@ -286,12 +323,20 @@ export default function SalesPage() {
     const payload: any = { close_status };
     payload.lost_reason = close_status === "lost" ? (lost_reason ?? "") : null;
 
-    const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+    const { error } = await supabase
+      .from("projects")
+      .update(payload)
+      .eq("id", projectId);
+
     if (error) throw error;
   }
 
   async function moveStageDB(projectId: string, nextStage: Stage) {
-    const { error } = await supabase.from("projects").update({ stage: nextStage }).eq("id", projectId);
+    const { error } = await supabase
+      .from("projects")
+      .update({ stage: nextStage })
+      .eq("id", projectId);
+
     if (error) throw error;
   }
 
@@ -310,13 +355,13 @@ export default function SalesPage() {
       return;
     }
 
-    // entering Closing: must pick won/lost (+reason)
+    // entering Closing: must pick won/lost(+reason)
     if (nextStage === "Closing") {
       setPendingMove({ kind: "close", project, nextStage });
       return;
     }
 
-    // Proposal+: must have amount
+    // Proposal+ : if amount missing, use AmountModal
     if (NEED_AMOUNT_STAGES.includes(nextStage)) {
       const missingAmount =
         project.amount === null ||
@@ -329,15 +374,9 @@ export default function SalesPage() {
       }
     }
 
-    try {
-      setBusy(true);
-      await moveStageDB(projectId, nextStage);
-      await load();
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to move stage");
-    } finally {
-      setBusy(false);
-    }
+    // all other stage transitions -> ask for stage date + comment
+    setPendingMove({ kind: "stage", project, nextStage });
+    return;
   }
 
   async function signOut() {
@@ -369,7 +408,10 @@ export default function SalesPage() {
       {loading ? <div className="text-white/60">Loading...</div> : null}
 
       {/* Create */}
-      <Card title="Create a new horse (project)" subtitle="Quickly add a new deal into the pipeline.">
+      <Card
+        title="Create a new horse (project)"
+        subtitle="Quickly add a new deal into the pipeline."
+      >
         <form onSubmit={createProject} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Input label="Date" value={date} onChange={setDate} type="date" />
@@ -421,6 +463,40 @@ export default function SalesPage() {
         </ModalShell>
       )}
 
+      {/* ===== Stage log modal (ordinary transitions) ===== */}
+      {pendingMove?.kind === "stage" ? (
+        <StageLogModal
+          nextStage={pendingMove.nextStage}
+          busy={busy}
+          onCancel={() => setPendingMove(null)}
+          onConfirm={async (stageDate, comment) => {
+            setErr(null);
+            try {
+              setBusy(true);
+
+              await moveStageDB(
+                pendingMove.project.id,
+                pendingMove.nextStage
+              );
+
+              await insertStageLog(
+                pendingMove.project.id,
+                pendingMove.nextStage,
+                stageDate,
+                comment
+              );
+
+              setPendingMove(null);
+              await load();
+            } catch (e: any) {
+              setErr(e.message ?? "Failed to update stage");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      ) : null}
+
       {/* ===== Amount modal ===== */}
       {pendingMove?.kind === "amount" ? (
         <AmountModal
@@ -428,16 +504,22 @@ export default function SalesPage() {
           nextStage={pendingMove.nextStage}
           busy={busy}
           onCancel={() => setPendingMove(null)}
-          onConfirm={async (amount) => {
+          onConfirm={async (amount, stageDate, comment) => {
             setErr(null);
             try {
               setBusy(true);
               await updateAmount(pendingMove.project.id, amount);
               await moveStageDB(pendingMove.project.id, pendingMove.nextStage);
+              await insertStageLog(
+                pendingMove.project.id,
+                pendingMove.nextStage,
+                stageDate,
+                comment
+              );
               setPendingMove(null);
               await load();
             } catch (e: any) {
-              setErr(e.message ?? "Failed to update amount");
+              setErr(e.message ?? "Failed to update stage");
             } finally {
               setBusy(false);
             }
@@ -451,7 +533,7 @@ export default function SalesPage() {
           project={pendingMove.project}
           busy={busy}
           onCancel={() => setPendingMove(null)}
-          onConfirm={async (status, reason) => {
+          onConfirm={async (status, reason, stageDate, comment) => {
             setErr(null);
             try {
               setBusy(true);
@@ -461,6 +543,12 @@ export default function SalesPage() {
                 status === "lost" ? reason : null
               );
               await moveStageDB(pendingMove.project.id, "Closing");
+              await insertStageLog(
+                pendingMove.project.id,
+                "Closing",
+                stageDate,
+                comment
+              );
               setPendingMove(null);
               await load();
             } catch (e: any) {
@@ -504,6 +592,84 @@ function ModalShell({
 
 // ===================== Modals =====================
 
+function StageLogModal({
+  nextStage,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  nextStage: Stage;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (stageDate: string, comment: string) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [stageDate, setStageDate] = useState<string>(today);
+  const [comment, setComment] = useState<string>("");
+
+  const invalid = !stageDate;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+        <div className="text-lg font-semibold text-white">Stage update</div>
+
+        <div className="mt-1 text-sm text-white/65">
+          This project is moving to <span className="text-white">{nextStage}</span>.
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="text-xs text-white/55">Stage date</label>
+            <input
+              type="date"
+              value={stageDate}
+              onChange={(e) => setStageDate(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-white/55">Comment</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="Add some notes for this stage..."
+              className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          {invalid ? (
+            <div className="text-xs text-rose-200">
+              Stage date is required.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-md border border-white/15 bg-white/[0.03] px-3 py-1.5 text-sm text-white/90 hover:bg-white/[0.08] transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            disabled={busy || invalid}
+            onClick={() => onConfirm(stageDate, comment)}
+            className="rounded-md border border-white/15 bg-white px-3 py-1.5 text-sm text-black hover:bg-white/90 transition disabled:opacity-50"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AmountModal({
   project,
   nextStage,
@@ -515,45 +681,86 @@ function AmountModal({
   nextStage: Stage;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (amount: number) => void;
+  onConfirm: (amount: number, stageDate: string, comment: string) => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+
   const [val, setVal] = useState<string>(project.amount?.toString() ?? "");
+  const [stageDate, setStageDate] = useState<string>(today);
+  const [comment, setComment] = useState<string>("");
 
   const amountNum = Number(val);
-  const invalid = !Number.isFinite(amountNum) || amountNum <= 0;
+  const invalid =
+    !Number.isFinite(amountNum) ||
+    amountNum <= 0 ||
+    !stageDate;
 
   return (
-    <ModalShell title="Amount required" onClose={onCancel}>
-      <div className="text-sm text-white/65">
-        This project is moving to <span className="text-white">{nextStage}</span>. Please enter the
-        deal amount.
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+        <div className="text-lg font-semibold text-white">Stage update required</div>
+        <div className="mt-1 text-sm text-white/65">
+          This project is moving to <span className="text-white">{nextStage}</span>.
+        </div>
 
-      <div className="mt-4">
-        <div className="text-xs text-white/55">Amount (USD)</div>
-        <input
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          placeholder="e.g. 25000"
-          inputMode="decimal"
-          className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
-        />
-        {invalid ? <div className="mt-2 text-xs text-rose-200">Amount must be &gt; 0.</div> : null}
-      </div>
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="text-xs text-white/55">Amount (USD)</label>
+            <input
+              value={val}
+              onChange={(e) => setVal(e.target.value)}
+              placeholder="e.g. 25000"
+              inputMode="decimal"
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
 
-      <div className="mt-5 flex justify-end gap-2">
-        <Btn disabled={busy} onClick={onCancel}>
-          Cancel
-        </Btn>
-        <Btn
-          disabled={busy || invalid}
-          variant="solid"
-          onClick={() => onConfirm(amountNum)}
-        >
-          Confirm
-        </Btn>
+          <div>
+            <label className="text-xs text-white/55">Stage date</label>
+            <input
+              type="date"
+              value={stageDate}
+              onChange={(e) => setStageDate(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-white/55">Comment</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="Add some notes for this stage..."
+              className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          {invalid ? (
+            <div className="text-xs text-rose-200">
+              Amount must be greater than 0, and stage date is required.
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-md border border-white/15 bg-white/[0.03] px-3 py-1.5 text-sm text-white/90 hover:bg-white/[0.08] transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={busy || invalid}
+            onClick={() => onConfirm(amountNum, stageDate, comment)}
+            className="rounded-md border border-white/15 bg-white px-3 py-1.5 text-sm text-black hover:bg-white/90 transition disabled:opacity-50"
+          >
+            Confirm
+          </button>
+        </div>
       </div>
-    </ModalShell>
+    </div>
   );
 }
 
@@ -566,76 +773,117 @@ function CloseModal({
   project: Project;
   busy: boolean;
   onCancel: () => void;
-  onConfirm: (status: "won" | "lost", reason: string) => void;
+  onConfirm: (
+    status: "won" | "lost",
+    reason: string,
+    stageDate: string,
+    comment: string
+  ) => void;
 }) {
+  const today = new Date().toISOString().slice(0, 10);
+
   const [status, setStatus] = useState<"won" | "lost">(
     project.close_status === "lost" ? "lost" : "won"
   );
   const [reason, setReason] = useState<string>(project.lost_reason ?? "");
+  const [stageDate, setStageDate] = useState<string>(today);
+  const [comment, setComment] = useState<string>("");
 
   const needReason = status === "lost";
   const reasonInvalid = needReason && reason.trim().length === 0;
+  const invalid = !stageDate || reasonInvalid;
 
   return (
-    <ModalShell title="Close this project" onClose={onCancel}>
-      <div className="text-sm text-white/65">
-        Choose the outcome. <span className="text-white">Closing is final</span> (stage cannot be
-        changed later).
-      </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md p-5 shadow-[0_18px_60px_rgba(0,0,0,0.55)]">
+        <div className="text-lg font-semibold text-white">Close this project</div>
+        <div className="mt-1 text-sm text-white/65">
+          Choose the outcome. <span className="text-white">Closing is final</span>.
+        </div>
 
-      <div className="mt-4 flex gap-2">
-        <button
-          disabled={busy}
-          onClick={() => setStatus("won")}
-          className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
-            status === "won"
-              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
-              : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
-          } disabled:opacity-50`}
-        >
-          ✅ Won
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => setStatus("lost")}
-          className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
-            status === "lost"
-              ? "border-rose-400/25 bg-rose-400/10 text-rose-200"
-              : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
-          } disabled:opacity-50`}
-        >
-          ❌ Lost
-        </button>
-      </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            disabled={busy}
+            onClick={() => setStatus("won")}
+            className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
+              status === "won"
+                ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
+            } disabled:opacity-50`}
+          >
+            ✅ Won
+          </button>
+          <button
+            disabled={busy}
+            onClick={() => setStatus("lost")}
+            className={`flex-1 rounded-xl border px-3 py-2 text-sm transition ${
+              status === "lost"
+                ? "border-rose-400/25 bg-rose-400/10 text-rose-200"
+                : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/[0.05]"
+            } disabled:opacity-50`}
+          >
+            ❌ Lost
+          </button>
+        </div>
 
-      {status === "lost" ? (
-        <div className="mt-4">
-          <div className="text-xs text-white/55">Reason (required)</div>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
-            placeholder="Why was it lost?"
-          />
-          {reasonInvalid ? (
-            <div className="mt-2 text-xs text-rose-200">Reason is required for Lost.</div>
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="text-xs text-white/55">Stage date</label>
+            <input
+              type="date"
+              value={stageDate}
+              onChange={(e) => setStageDate(e.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-white/55">Comment</label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows={3}
+              placeholder="Add some notes for this stage..."
+              className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+            />
+          </div>
+
+          {status === "lost" ? (
+            <div>
+              <label className="text-xs text-white/55">Reason (required)</label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                className="mt-2 w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-white outline-none focus:border-white/20"
+                placeholder="Why was it lost?"
+              />
+              {reasonInvalid ? (
+                <div className="mt-2 text-xs text-rose-200">
+                  Reason is required for Lost.
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
 
-      <div className="mt-5 flex justify-end gap-2">
-        <Btn disabled={busy} onClick={onCancel}>
-          Cancel
-        </Btn>
-        <Btn
-          disabled={busy || reasonInvalid}
-          variant="solid"
-          onClick={() => onConfirm(status, reason)}
-        >
-          Confirm & Close
-        </Btn>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            disabled={busy}
+            onClick={onCancel}
+            className="rounded-md border border-white/15 bg-white/[0.03] px-3 py-1.5 text-sm text-white/90 hover:bg-white/[0.08] transition disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={busy || invalid}
+            onClick={() => onConfirm(status, reason, stageDate, comment)}
+            className="rounded-md border border-white/15 bg-white px-3 py-1.5 text-sm text-black hover:bg-white/90 transition disabled:opacity-50"
+          >
+            Confirm & Close
+          </button>
+        </div>
       </div>
-    </ModalShell>
+    </div>
   );
 }

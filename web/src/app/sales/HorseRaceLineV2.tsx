@@ -235,7 +235,7 @@ export function HorseRaceLineV2({
               : "-translate-x-1/2";
 
             const i = STAGES.indexOf(p.stage);
-            const prev = i > 0 ? STAGES[i - 1] : null;
+            //const prev = i > 0 ? STAGES[i - 1] : null;
             const next = i < STAGES.length - 1 ? STAGES[i + 1] : null;
 
             const isClosing = p.stage === "Closing";
@@ -335,13 +335,6 @@ export function HorseRaceLineV2({
                         )
                       ) : (
                         <div className="flex gap-2">
-                          <GhostBtn
-                            disabled={!prev}
-                            onClick={() => prev && onMove(p.id, prev)}
-                            title="Back"
-                          >
-                            ◀
-                          </GhostBtn>
                           <GhostBtn
                             disabled={!next}
                             onClick={() => next && onMove(p.id, next)}

@@ -55,7 +55,11 @@ function calcStats(projects: Project[]) {
   let active = 0;
   let won = 0;
   let lost = 0;
+
   let amountTotal = 0;
+  let activeProposalAmount = 0;
+  let closingWonAmount = 0;
+  let closingLostAmount = 0;
 
   const byStage = makeStageNumberMap();
 
@@ -63,20 +67,50 @@ function calcStats(projects: Project[]) {
     total++;
     byStage[p.stage]++;
 
-    const isFinal =
-      p.stage === "Closing" &&
-      (p.close_status === "won" || p.close_status === "lost");
+    const amount = p.amount != null && Number(p.amount) > 0 ? Number(p.amount) : 0;
+
+    const isWon = p.stage === "Closing" && p.close_status === "won";
+    const isLost = p.stage === "Closing" && p.close_status === "lost";
+    const isFinal = isWon || isLost;
 
     if (!isFinal) active++;
-    if (p.close_status === "won") won++;
-    if (p.close_status === "lost") lost++;
+    if (isWon) won++;
+    if (isLost) lost++;
 
-    if (p.amount != null && Number(p.amount) > 0) {
-      amountTotal += Number(p.amount);
+    if (amount > 0) {
+      amountTotal += amount;
+
+      // Active pipeline amount after proposal
+      if (
+        p.stage === "Proposal" ||
+        p.stage === "Negotiation" ||
+        p.stage === "Contract Review"
+      ) {
+        activeProposalAmount += amount;
+      }
+
+      // Closing won/lost amount
+      if (isWon) {
+        closingWonAmount += amount;
+      }
+
+      if (isLost) {
+        closingLostAmount += amount;
+      }
     }
   }
 
-  return { total, active, won, lost, amountTotal, byStage };
+  return {
+    total,
+    active,
+    won,
+    lost,
+    amountTotal,
+    activeProposalAmount,
+    closingWonAmount,
+    closingLostAmount,
+    byStage,
+  };
 }
 
 function StatChip({
@@ -267,17 +301,14 @@ export default function BossPage() {
         <div className="text-lg font-semibold text-white">Global summary</div>
         <div className="mt-1 text-sm text-white/55">Pipeline overview</div>
 
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          <StatChip label="Total" value={globalStats.total} />
-          <StatChip label="Active" value={globalStats.active} tone="active" />
-          <StatChip label="Won" value={globalStats.won} tone="won" />
-          <StatChip label="Lost" value={globalStats.lost} tone="lost" />
-          <StatChip
-            label="Amount"
-            value={fmtMoney(globalStats.amountTotal)}
-            tone="amount"
-          />
-        </div>
+        <StatChip label="Total" value={globalStats.total} />
+        <StatChip label="Active" value={globalStats.active} tone="active" />
+        <StatChip label="Won" value={globalStats.won} tone="won" />
+        <StatChip label="Lost" value={globalStats.lost} tone="lost" />
+        <StatChip label="Total Amount" value={fmtMoney(globalStats.amountTotal)} tone="amount" />
+        <StatChip label="Active Proposal" value={fmtMoney(globalStats.activeProposalAmount)} tone="active" />
+        <StatChip label="Won Amount" value={fmtMoney(globalStats.closingWonAmount)} tone="won" />
+        <StatChip label="Lost Amount" value={fmtMoney(globalStats.closingLostAmount)} tone="lost" />
 
         {/* Global stage counts aligned */}
         <div className="mt-5 grid gap-3" style={{ gridTemplateColumns: GRID_COLS }}>
@@ -313,15 +344,14 @@ export default function BossPage() {
                   <div className="text-lg font-semibold text-white">{g.name}</div>
 
                   <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <StatChip label="Total" value={g.stats.total} />
-                    <StatChip label="Active" value={g.stats.active} tone="active" />
-                    <StatChip label="Won" value={g.stats.won} tone="won" />
-                    <StatChip label="Lost" value={g.stats.lost} tone="lost" />
-                    <StatChip
-                      label="Amount"
-                      value={fmtMoney(g.stats.amountTotal)}
-                      tone="amount"
-                    />
+                  <StatChip label="Total" value={g.stats.total} />
+                  <StatChip label="Active" value={g.stats.active} tone="active" />
+                  <StatChip label="Won" value={g.stats.won} tone="won" />
+                  <StatChip label="Lost" value={g.stats.lost} tone="lost" />
+                  <StatChip label="Total Amount" value={fmtMoney(g.stats.amountTotal)} tone="amount" />
+                  <StatChip label="Active Proposal" value={fmtMoney(g.stats.activeProposalAmount)} tone="active" />
+                  <StatChip label="Won Amount" value={fmtMoney(g.stats.closingWonAmount)} tone="won" />
+                  <StatChip label="Lost Amount" value={fmtMoney(g.stats.closingLostAmount)} tone="lost" />
                   </div>
                 </div>
               </div>
