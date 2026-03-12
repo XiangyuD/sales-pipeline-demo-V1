@@ -165,7 +165,6 @@ export function BossRaceLanes(props: {
     <>
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 overflow-x-auto">
         <div className="min-w-[1100px]">
-          {/* Header row */}
           <div className="grid grid-cols-[180px_repeat(7,minmax(120px,1fr))] gap-2 mb-3">
             <div className="text-sm font-medium text-white/80">Sales (Lane)</div>
             {STAGES.map((s, idx) => (
@@ -176,14 +175,12 @@ export function BossRaceLanes(props: {
             ))}
           </div>
 
-          {/* Lanes */}
           <div className="space-y-2">
             {owners.map((owner) => (
               <div
                 key={owner}
                 className="grid grid-cols-[180px_repeat(7,minmax(120px,1fr))] gap-2"
               >
-                {/* Lane label */}
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-3">
                   <div className="text-sm font-semibold text-white">
                     {ownerNameMap[owner] ?? `sales-${owner.slice(0, 8)}`}
@@ -196,7 +193,6 @@ export function BossRaceLanes(props: {
                   </div>
                 </div>
 
-                {/* Stage cells */}
                 {STAGES.map((stage) => {
                   const list = laneMap[owner][stage];
                   return (
@@ -220,17 +216,14 @@ export function BossRaceLanes(props: {
                               key={p.id}
                               className="group rounded-xl border border-white/10 bg-[#0B0F18]/78 p-3 transition duration-200 hover:border-sky-400/25 hover:bg-[#0E1422]/90 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.08),0_12px_30px_rgba(2,12,27,0.45)]"
                             >
-                              {/* Customer */}
                               <div className="text-[13px] font-semibold text-white truncate">
                                 {p.customer_detail ?? "No customer"}
                               </div>
 
-                              {/* Project info */}
                               <div className="mt-1 text-xs text-white/60 line-clamp-2 min-h-[32px]">
                                 {p.project_info ?? "No info"}
                               </div>
 
-                              {/* Amount + status */}
                               <div className="mt-3 flex flex-wrap items-center gap-2 min-h-[30px]">
                                 {showAmount ? (
                                   <AmountBadge amount={Number(p.amount)} />
@@ -241,7 +234,6 @@ export function BossRaceLanes(props: {
                                 ) : null}
                               </div>
 
-                              {/* Bottom action row */}
                               <div className="mt-3 flex justify-end">
                                 <InfoButton onClick={() => openInfo(p)} />
                               </div>
@@ -270,15 +262,14 @@ export function BossRaceLanes(props: {
         </div>
       </div>
 
-      {/* Info modal */}
       {mounted && infoTarget
         ? createPortal(
             <div
-              className="fixed inset-0 z-[9999] bg-black/60"
+              className="fixed inset-0 z-[9999] bg-black/72 backdrop-blur-[3px]"
               onClick={() => setInfoTarget(null)}
             >
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[94vw] max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#090D14] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[720px] max-w-[94vw] max-h-[85vh] overflow-y-auto rounded-2xl border border-white/15 bg-[#101826] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.65),0_0_0_1px_rgba(255,255,255,0.03)]"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start justify-between gap-4">
@@ -298,16 +289,17 @@ export function BossRaceLanes(props: {
                   </button>
                 </div>
 
-                {/* Summary */}
+                <div className="mt-4 h-px bg-white/8" />
+
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                  <div className="rounded-xl border border-white/12 bg-white/[0.06] p-3">
                     <div className="text-xs text-white/45">Current stage</div>
                     <div className="mt-1 text-sm text-white/90">
                       {infoTarget.stage}
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                  <div className="rounded-xl border border-white/12 bg-white/[0.06] p-3">
                     <div className="text-xs text-white/45">Amount</div>
                     <div className="mt-1 text-sm text-white/90">
                       {infoTarget.amount != null && Number(infoTarget.amount) > 0
@@ -316,7 +308,7 @@ export function BossRaceLanes(props: {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                  <div className="rounded-xl border border-white/12 bg-white/[0.06] p-3">
                     <div className="text-xs text-white/45">Outcome</div>
                     <div className="mt-1 text-sm text-white/90">
                       {infoTarget.stage === "Closing"
@@ -330,7 +322,6 @@ export function BossRaceLanes(props: {
                   </div>
                 </div>
 
-                {/* Lost reason */}
                 {infoTarget.stage === "Closing" &&
                 infoTarget.close_status === "lost" &&
                 (infoTarget.lost_reason ?? "").trim() ? (
@@ -344,7 +335,6 @@ export function BossRaceLanes(props: {
                   </div>
                 ) : null}
 
-                {/* Timeline */}
                 <div className="mt-5">
                   <div className="text-sm font-semibold text-white">Timeline</div>
 
@@ -370,7 +360,6 @@ export function BossRaceLanes(props: {
 
                         return (
                           <div key={log.id} className="flex gap-3">
-                            {/* timeline line */}
                             <div className="flex flex-col items-center pt-1">
                               <div className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.45)]" />
                               {!isLast ? (
@@ -378,8 +367,7 @@ export function BossRaceLanes(props: {
                               ) : null}
                             </div>
 
-                            {/* content */}
-                            <div className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                            <div className="flex-1 rounded-xl border border-white/12 bg-[#141D2B] p-4">
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <div className="text-sm font-medium text-white/90">
@@ -390,7 +378,9 @@ export function BossRaceLanes(props: {
                                     {daysFromLead != null
                                       ? daysFromLead === 0
                                         ? " · Day 0"
-                                        : ` · +${daysFromLead} day${daysFromLead > 1 ? "s" : ""}`
+                                        : ` · +${daysFromLead} day${
+                                            daysFromLead > 1 ? "s" : ""
+                                          }`
                                       : ""}
                                   </div>
                                 </div>
