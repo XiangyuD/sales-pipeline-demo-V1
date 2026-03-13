@@ -305,7 +305,7 @@ export default function BossPage() {
         <StatChip label="Active" value={globalStats.active} tone="active" />
         <StatChip label="Won" value={globalStats.won} tone="won" />
         <StatChip label="Lost" value={globalStats.lost} tone="lost" />
-        <StatChip label="Total Amount" value={fmtMoney(globalStats.amountTotal)} tone="amount" />
+        {/* <StatChip label="Total Amount" value={fmtMoney(globalStats.amountTotal)} tone="amount" /> */}
         <StatChip label="Active Proposal" value={fmtMoney(globalStats.activeProposalAmount)} tone="active" />
         <StatChip label="Won Amount" value={fmtMoney(globalStats.closingWonAmount)} tone="won" />
         <StatChip label="Lost Amount" value={fmtMoney(globalStats.closingLostAmount)} tone="lost" />
@@ -348,7 +348,7 @@ export default function BossPage() {
                   <StatChip label="Active" value={g.stats.active} tone="active" />
                   <StatChip label="Won" value={g.stats.won} tone="won" />
                   <StatChip label="Lost" value={g.stats.lost} tone="lost" />
-                  <StatChip label="Total Amount" value={fmtMoney(g.stats.amountTotal)} tone="amount" />
+                  {/* <StatChip label="Total Amount" value={fmtMoney(g.stats.amountTotal)} tone="amount" /> */}
                   <StatChip label="Active Proposal" value={fmtMoney(g.stats.activeProposalAmount)} tone="active" />
                   <StatChip label="Won Amount" value={fmtMoney(g.stats.closingWonAmount)} tone="won" />
                   <StatChip label="Lost Amount" value={fmtMoney(g.stats.closingLostAmount)} tone="lost" />

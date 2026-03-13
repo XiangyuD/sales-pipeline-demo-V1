@@ -380,7 +380,7 @@ export function BossRaceLanes(props: {
                                         ? " · Day 0"
                                         : ` · +${daysFromLead} day${
                                             daysFromLead > 1 ? "s" : ""
-                                          }`
+                                          }` + " from the lead"
                                       : ""}
                                   </div>
                                 </div>
