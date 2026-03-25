@@ -42,10 +42,9 @@ function makeStageNumberMap(): Record<Stage, number> {
   return {
     Lead: 0,
     Qualification: 0,
-    "Solution Design": 0,
+    "Spec Review": 0,
     Proposal: 0,
     Negotiation: 0,
-    "Contract Review": 0,
     Closing: 0,
   };
 }
@@ -83,8 +82,7 @@ function calcStats(projects: Project[]) {
       // Active pipeline amount after proposal
       if (
         p.stage === "Proposal" ||
-        p.stage === "Negotiation" ||
-        p.stage === "Contract Review"
+        p.stage === "Negotiation"
       ) {
         activeProposalAmount += amount;
       }

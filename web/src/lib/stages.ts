@@ -1,10 +1,9 @@
 export const STAGES = [
     "Lead",
     "Qualification",
-    "Solution Design",
+    "Spec Review",
     "Proposal",
     "Negotiation",
-    "Contract Review",
     "Closing",
   ] as const;
   

@@ -32,7 +32,6 @@ type StageLog = {
 const SHOW_AMOUNT_STAGES: Stage[] = [
   "Proposal",
   "Negotiation",
-  "Contract Review",
   "Closing",
 ];
 
@@ -149,23 +148,26 @@ export function BossRaceLanes(props: {
     laneMap[owner] = {
       Lead: [],
       Qualification: [],
-      "Solution Design": [],
+      "Spec Review": [],
       Proposal: [],
       Negotiation: [],
-      "Contract Review": [],
       Closing: [],
     };
   }
 
-  for (const p of projects) {
-    laneMap[p.owner_user_id]?.[p.stage].push(p);
+for (const p of projects) {
+  if (laneMap[p.owner_user_id] && laneMap[p.owner_user_id][p.stage]) {
+    laneMap[p.owner_user_id][p.stage].push(p);
+  } else {
+    console.warn("Unexpected stage in BossRaceLanes:", p.stage, p);
   }
+}
 
   return (
     <>
       <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 overflow-x-auto">
-        <div className="min-w-[1100px]">
-          <div className="grid grid-cols-[180px_repeat(7,minmax(120px,1fr))] gap-2 mb-3">
+        <div className="min-w-[980px]">
+          <div className="grid grid-cols-[180px_repeat(6,minmax(120px,1fr))] gap-2 mb-3">
             <div className="text-sm font-medium text-white/80">Sales (Lane)</div>
             {STAGES.map((s, idx) => (
               <div key={s} className="text-center">
@@ -179,7 +181,7 @@ export function BossRaceLanes(props: {
             {owners.map((owner) => (
               <div
                 key={owner}
-                className="grid grid-cols-[180px_repeat(7,minmax(120px,1fr))] gap-2"
+                className="grid grid-cols-[180px_repeat(6,minmax(120px,1fr))] gap-2"
               >
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-md p-3">
                   <div className="text-sm font-semibold text-white">
@@ -198,52 +200,54 @@ export function BossRaceLanes(props: {
                   return (
                     <div
                       key={stage}
-                      className="rounded-xl border border-white/10 bg-white/[0.02] p-2 min-h-[90px]"
+                      className="rounded-xl border border-white/10 bg-white/[0.02] p-3 min-h-180px]"
                     >
-                      <div className="space-y-2">
-                        {list.map((p) => {
-                          const showAmount =
-                            SHOW_AMOUNT_STAGES.includes(p.stage) &&
-                            p.amount != null &&
-                            Number(p.amount) > 0;
+                      <div className="flex h-full flex-col">
+                      {list.length > 0 ? (
+                        <div className="flex flex-col gap-3">
+                          {list.map((p) => {
+                            const showAmount =
+                              SHOW_AMOUNT_STAGES.includes(p.stage) &&
+                              p.amount != null &&
+                              Number(p.amount) > 0;
 
-                          const showCloseStatus =
-                            p.stage === "Closing" &&
-                            (p.close_status === "won" || p.close_status === "lost");
+                            const showCloseStatus =
+                              p.stage === "Closing" &&
+                              (p.close_status === "won" || p.close_status === "lost");
 
-                          return (
-                            <div
-                              key={p.id}
-                              className="group rounded-xl border border-white/10 bg-[#0B0F18]/78 p-3 transition duration-200 hover:border-sky-400/25 hover:bg-[#0E1422]/90 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.08),0_12px_30px_rgba(2,12,27,0.45)]"
-                            >
-                              <div className="text-[13px] font-semibold text-white truncate">
-                                {p.customer_detail ?? "No customer"}
+                            return (
+                              <div
+                                key={p.id}
+                                className="group rounded-xl border border-white/10 bg-[#0B0F18]/78 p-3 transition duration-200 hover:border-sky-400/25 hover:bg-[#0E1422]/90 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.08),0_12px_30px_rgba(2,12,27,0.45)]"
+                              >
+                                <div className="text-[13px] font-semibold text-white truncate">
+                                  {p.customer_detail ?? "No customer"}
+                                </div>
+
+                                <div className="mt-1 text-xs text-white/60 line-clamp-2 min-h-[32px]">
+                                  {p.project_info ?? "No info"}
+                                </div>
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2 min-h-[30px]">
+                                  {showAmount ? <AmountBadge amount={Number(p.amount)} /> : null}
+
+                                  {showCloseStatus ? (
+                                    <StatusBadge status={p.close_status as "won" | "lost"} />
+                                  ) : null}
+                                </div>
+
+                                <div className="mt-3 flex justify-end">
+                                  <InfoButton onClick={() => openInfo(p)} />
+                                </div>
                               </div>
-
-                              <div className="mt-1 text-xs text-white/60 line-clamp-2 min-h-[32px]">
-                                {p.project_info ?? "No info"}
-                              </div>
-
-                              <div className="mt-3 flex flex-wrap items-center gap-2 min-h-[30px]">
-                                {showAmount ? (
-                                  <AmountBadge amount={Number(p.amount)} />
-                                ) : null}
-
-                                {showCloseStatus ? (
-                                  <StatusBadge status={p.close_status as "won" | "lost"} />
-                                ) : null}
-                              </div>
-
-                              <div className="mt-3 flex justify-end">
-                                <InfoButton onClick={() => openInfo(p)} />
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {list.length === 0 ? (
-                          <div className="text-xs text-white/20">—</div>
-                        ) : null}
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[11px] text-white/25">
+                          No deals
+                        </div>
+                      )}
                       </div>
                     </div>
                   );
