@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { type Stage } from "@/lib/stages";
+import { STAGES, type Stage } from "@/lib/stages";
 import { useRouter } from "next/navigation";
 import { getMyRole } from "@/lib/authz";
 import { HorseRaceLineV2 } from "./HorseRaceLineV2";
@@ -33,7 +33,6 @@ type PendingMove =
 const NEED_AMOUNT_STAGES: Stage[] = [
   "Proposal",
   "Negotiation",
-  "Contract Review",
   "Closing",
 ];
 
@@ -229,10 +228,9 @@ export default function SalesPage() {
     const map: Record<Stage, Project[]> = {
       Lead: [],
       Qualification: [],
-      "Solution Design": [],
+      "Spec Review": [],
       Proposal: [],
       Negotiation: [],
-      "Contract Review": [],
       Closing: [],
     };
     for (const p of projects) map[p.stage].push(p);
@@ -303,7 +301,17 @@ export default function SalesPage() {
     comment: string
   ) {
     const { data: auth } = await supabase.auth.getUser();
-
+  
+    const { data: existing, error: findErr } = await supabase
+      .from("project_stage_logs")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("stage", stage)
+      .maybeSingle();
+  
+    if (findErr) throw findErr;
+    if (existing) return;
+  
     const { error } = await supabase.from("project_stage_logs").insert({
       project_id: projectId,
       stage,
@@ -311,7 +319,7 @@ export default function SalesPage() {
       comment: comment.trim() || null,
       created_by: auth.user?.id ?? null,
     });
-
+  
     if (error) throw error;
   }
 
@@ -379,6 +387,78 @@ export default function SalesPage() {
     return;
   }
 
+  async function rollbackStage(projectId: string, targetStage: Stage) {
+    setErr(null);
+  
+    try {
+      setBusy(true);
+  
+      const project = projects.find((p) => p.id === projectId);
+      if (!project) throw new Error("Project not found");
+  
+      const currentIndex = STAGES.indexOf(project.stage);
+      const targetIndex = STAGES.indexOf(targetStage);
+  
+      if (targetIndex === -1) {
+        throw new Error(`Invalid target stage: ${targetStage}`);
+      }
+  
+      if (targetIndex >= currentIndex) {
+        throw new Error(
+          `Rollback target must be earlier. current=${project.stage}, target=${targetStage}`
+        );
+      }
+  
+      const stagesToDelete = STAGES.slice(targetIndex + 1);
+  
+      console.log("ROLLBACK projectId:", projectId);
+      console.log("ROLLBACK current stage:", project.stage);
+      console.log("ROLLBACK target stage:", targetStage);
+      console.log("ROLLBACK stagesToDelete:", stagesToDelete);
+  
+      if (stagesToDelete.length > 0) {
+        const { data: deletedRows, error: delErr } = await supabase
+          .from("project_stage_logs")
+          .delete()
+          .eq("project_id", projectId)
+          .in("stage", stagesToDelete)
+          .select("id, stage");
+  
+        console.log("ROLLBACK deletedRows:", deletedRows);
+        console.log("ROLLBACK delErr:", delErr);
+  
+        if (delErr) throw delErr;
+      }
+  
+      const updatePayload: any = {
+        stage: targetStage,
+        close_status: null,
+        lost_reason: null,
+      };
+  
+      if (!NEED_AMOUNT_STAGES.includes(targetStage)) {
+        updatePayload.amount = null;
+      }
+  
+      const { error: updateErr } = await supabase
+        .from("projects")
+        .update(updatePayload)
+        .eq("id", projectId);
+  
+      console.log("ROLLBACK updatePayload:", updatePayload);
+      console.log("ROLLBACK updateErr:", updateErr);
+  
+      if (updateErr) throw updateErr;
+  
+      await load();
+    } catch (e: any) {
+      console.error("ROLLBACK failed:", e);
+      setErr(e.message ?? "Rollback failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -444,6 +524,12 @@ export default function SalesPage() {
           onMove={moveStage}
           onDelete={handleDeleteRequest}
           onSaveReason={saveLostReason}
+          onRollback={rollbackStage}
+          onAmountSaved={(projectId, amount) => {
+            setProjects((prev) =>
+              prev.map((p) => (p.id === projectId ? { ...p, amount } : p))
+            );
+          }}
         />
       </div>
 

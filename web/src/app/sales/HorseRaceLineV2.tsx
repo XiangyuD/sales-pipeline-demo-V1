@@ -36,7 +36,6 @@ const stagePct = (s: Stage) => {
 const NEED_AMOUNT_STAGES: Stage[] = [
   "Proposal",
   "Negotiation",
-  "Contract Review",
   "Closing",
 ];
 
@@ -155,12 +154,16 @@ export function HorseRaceLineV2({
   onMove,
   onDelete,
   onSaveReason,
+  onRollback,
+  onAmountSaved,
   title = "Race Track",
 }: {
   projects: Project[];
   onMove: (id: string, next: Stage) => void;
   onDelete: (id: string) => void;
   onSaveReason: (projectId: string, reason: string) => Promise<void> | void;
+  onRollback: (id: string, target: Stage) => Promise<void> | void;
+  onAmountSaved: (projectId: string, amount: number | null) => void;
   title?: string;
 }) {
   const supabase = createClient();
@@ -174,6 +177,11 @@ export function HorseRaceLineV2({
 
   const [amountDraft, setAmountDraft] = useState("");
   const [lostReasonDraft, setLostReasonDraft] = useState("");
+
+  const [rollbackTarget, setRollbackTarget] = useState<{
+    project: Project;
+    targetStage: Stage;
+  } | null>(null);
 
   const canEditAmount =
   infoTarget ? NEED_AMOUNT_STAGES.includes(infoTarget.stage) : false;
@@ -282,6 +290,7 @@ export function HorseRaceLineV2({
     }
   
     setInfoTarget((prev) => (prev ? { ...prev, amount: nextAmount } : prev));
+    onAmountSaved(projectId, nextAmount);
     setSavingId(null);
   }
   
@@ -376,6 +385,7 @@ export function HorseRaceLineV2({
 
             const i = STAGES.indexOf(p.stage);
             const next = i < STAGES.length - 1 ? STAGES[i + 1] : null;
+            const prev = i > 0 ? STAGES[i - 1] : null;
 
             const isClosing = p.stage === "Closing";
 
@@ -468,13 +478,30 @@ export function HorseRaceLineV2({
                           >
                             Info
                           </GhostBtn>
+
+                          <div className="flex gap-2">
                           <GhostBtn
-                            disabled={!next}
-                            onClick={() => next && onMove(p.id, next)}
-                            title="Next"
-                          >
-                            ▶
-                          </GhostBtn>
+                              disabled={!prev}
+                              onClick={() => {
+                                if (!prev) return;
+                                setRollbackTarget({
+                                  project: p,
+                                  targetStage: prev,
+                                });
+                              }}
+                              title="Rollback"
+                            >
+                              ◀
+                            </GhostBtn>
+
+                            <GhostBtn
+                              disabled={!next}
+                              onClick={() => next && onMove(p.id, next)}
+                              title="Next"
+                            >
+                              ▶
+                            </GhostBtn>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -496,7 +523,7 @@ export function HorseRaceLineV2({
           title="Project info"
           subtitle={`🐎 ${infoTarget.customer_detail ?? "No customer"} — ${
             infoTarget.project_info ?? "No info"
-          }`}
+          }— ID: ${infoTarget.id}`}
           onClose={closeInfo}
         >
           {logsErr ? (
@@ -610,6 +637,50 @@ export function HorseRaceLineV2({
                 })}
               </div>
             )}
+          </div>
+        </ModalShell>
+      ) : null}
+
+      {rollbackTarget ? (
+        <ModalShell
+          title="Rollback this project?"
+          subtitle={`🐎 ${rollbackTarget.project.customer_detail ?? "No customer"} — ${
+            rollbackTarget.project.project_info ?? "No info"
+          }`}
+          onClose={() => setRollbackTarget(null)}
+          widthClass="w-[560px] max-w-[94vw]"
+        >
+          <div className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            This will roll the project back to{" "}
+            <span className="font-semibold text-white">
+              {rollbackTarget.targetStage}
+            </span>.
+            <br />
+            The current stage  logs will be removed.
+          </div>
+
+          <div className="mt-5 flex justify-end gap-2">
+            <GhostBtn onClick={() => setRollbackTarget(null)}>
+              Cancel
+            </GhostBtn>
+
+            <GhostBtn
+              className="border-rose-400/30 bg-rose-400/10 text-rose-200 hover:bg-rose-400/15"
+              onClick={async () => {
+                const current = rollbackTarget;
+                if (!current) return;
+
+                await onRollback(current.project.id, current.targetStage);
+
+                if (infoTarget?.id === current.project.id) {
+                  await openInfo(current.project);
+                }
+
+                setRollbackTarget(null);
+              }}
+            >
+              Confirm rollback
+            </GhostBtn>
           </div>
         </ModalShell>
       ) : null}
