@@ -113,6 +113,8 @@ export function BossRaceLanes(props: {
   }, []);
 
   async function openInfo(project: Project) {
+    console.log("BOSS openInfo projectId:", project.id);
+    console.log("BOSS openInfo project:", project);
     setInfoTarget(project);
     setLogs([]);
     setLogsErr(null);
